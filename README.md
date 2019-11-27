@@ -51,7 +51,7 @@ $ ./benchmark -i 100000 -s protobuf
 $ ./benchmark -i 100000 -s protobuf,cereal
 ```
 
-# Results
+# Results - 1
 
 Following results were obtained running 100000 serialize-deserialize operations 3 times and then averaging results on a server, which equits with Intel Xeon E5-2650 processor and 2400MHz, 32G DDR4 memory. And the operating system is ubuntu 16.04 server
 Exact versions of libraries used are:
@@ -87,3 +87,11 @@ For capnproto and flatbuffers since they already store data in a "serialized" fo
 | capnproto      | 17768                 | 565                  |
 | flatbuffers    | 17632                 | 606                  |
 
+
+# Results-2
+
+In order to see the time of serialization and deserialization respectively, we modify benchmark.cpp to serialize-deserilize 100000 same objects, and record serialization & deserialization time.
+However, we need to do some preprocess to warm-up , in order to avoid the effect of **memory allocation and memory copy** when using some classes which would allocate memory dynamically during running, like std::string, std::ostringstream etc.
+Specially, we  modify the constructor of **class sbuffer** in **src/msgpack/sbuffer**, and **next()** of **MemoryOutputStream** in **lang/c++/impl/Stream.cc** (like the following picture)
+![avro](images/avro.JPG)
+~[msgpack](images/msgpack.JPG)
