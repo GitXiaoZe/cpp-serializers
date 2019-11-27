@@ -51,7 +51,7 @@ $ ./benchmark -i 100000 -s protobuf
 $ ./benchmark -i 100000 -s protobuf,cereal
 ```
 
-# Results - 1
+# Results-1
 
 Following results were obtained running 100000 serialize-deserialize operations 3 times and then averaging results on a server, which equits with Intel Xeon E5-2650 processor and 2400MHz, 32G DDR4 memory. And the operating system is ubuntu 16.04 server
 Exact versions of libraries used are:
