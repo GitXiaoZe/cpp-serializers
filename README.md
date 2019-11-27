@@ -53,7 +53,7 @@ $ ./benchmark -i 100000 -s protobuf,cereal
 
 # Results-1
 
-Following results were obtained running 100000 serialize-deserialize operations 3 times and then averaging results on a server, which equits with Intel Xeon E5-2650 processor and 2400MHz, 32G DDR4 memory. And the operating system is ubuntu 16.04 server
+Following results were obtained by running 100000 serialize-deserialize operations 3 times and then averaging results on a server, which equits with Intel Xeon E5-2650 processor and 2400MHz, 32G DDR4 memory. And the operating system is ubuntu 16.04 server
 Exact versions of libraries used are:
 
 * thrift 0.12.0
@@ -90,8 +90,27 @@ For capnproto and flatbuffers since they already store data in a "serialized" fo
 
 # Results-2
 
-In order to see the time of serialization and deserialization respectively, we modify benchmark.cpp to serialize-deserilize 100000 same objects, and record serialization & deserialization time.
+In order to see the time of serialization and deserialization respectively, we modify benchmark.cpp to serialize-deserilize **iteration** same objects, and record serialization & deserialization time.
+
 However, we need to do some preprocess to warm-up , in order to avoid the effect of **memory allocation and memory copy** when using some classes which would allocate memory dynamically during running, like std::string, std::ostringstream etc.
+
 Specially, we  modify the constructor of **class sbuffer** in **src/msgpack/sbuffer**, and **next()** of **MemoryOutputStream** in **lang/c++/impl/Stream.cc** (like the following picture)
+
 ![avro](images/avro.JPG)
-~[msgpack](images/msgpack.JPG)
+
+![msgpack](images/msgpack.JPG)
+
+
+The following results were obtained by running serialize-deserialize 100000 same objects 3 times and averaging results. The environment is listed above.
+
+| serializer     | serialization size(bytes) | serialization time (ms) | deserialization time (ms) |
+| -------------- | ------------------------- | ----------------------- | ------------------------- |
+| thrift-binary  | 17017                     | 545                     | 2218                      |
+| thrift-compact | 13378                     | 1586                    | 2778                      |
+| protobuf       | 16116                     | 1428                    | 3311                      |
+| boost          | 17470                     | 607                     | 1445                      |
+| msgpack        | 13402                     | 1334                    | 1191                      |
+| cereal         | 17416                     | 685                     | 512                       |
+| avro           | 16384                     | 5783                    | 3402                      |
+| yas            | 17416                     | 554                     | 315                       |
+| yas-compact    | 13321                     | 851                     | 1653                      |
