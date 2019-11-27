@@ -728,8 +728,6 @@ void msgpack_serialize_test(size_t iterations){
     auto finish_serialize = std::chrono::high_resolution_clock::now();
 
     std::string serialize_result(msgbuf.data(), msgbuf.size());
-    records[0].ids.clear();
-    std::cout << " records[0].size = " << records[0].ids.size() << std::endl;
     //deserialization
     auto begin_deserialize = std::chrono::high_resolution_clock::now();
     msg = msgpack::unpack(serialize_result.data(), serialize_result.size());
@@ -738,7 +736,6 @@ void msgpack_serialize_test(size_t iterations){
         obj.convert(records[s]);
     }
     auto finish_deserialize = std::chrono::high_resolution_clock::now();
-    std::cout << " records[0].size = " << records[0].ids.size() << std::endl;
     delete [] records ;
 
     std::cout << "msgpack_serialization : " << std::endl
@@ -837,9 +834,9 @@ void cereal_serialize_test(size_t iterations){
 
     std::cout << "cereal_serialization : " << std::endl
              << " iterations = " << iterations << std::endl
-             << " serialized form size = " << serialized_size << std::endl
-             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << std::endl
-             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << std::endl;
+             << " serialized form size = " << serialized_size  << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl;
 }
 
 
