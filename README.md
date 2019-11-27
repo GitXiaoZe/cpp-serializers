@@ -94,7 +94,7 @@ In order to see the time of serialization and deserialization respectively, we m
 
 However, we need to do some preprocess to warm-up , in order to avoid the effect of **memory allocation and memory copy** when using some classes which would allocate memory dynamically during running, like std::string, std::ostringstream etc.
 
-Specially, we  modify the constructor of **class sbuffer** in **src/msgpack/sbuffer**, and **next()** of **MemoryOutputStream** in **lang/c++/impl/Stream.cc** (like the following picture)
+Specially, we  modify the constructor of **class sbuffer** in **src/msgpack/sbuffer**, and **next()** of **MemoryOutputStream** in **lang/c++/impl/Stream.cc** (please see the following picture)
 
 ![avro](images/avro.JPG)
 
