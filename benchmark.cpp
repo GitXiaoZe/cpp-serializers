@@ -277,7 +277,6 @@ thrift_serialize_test(size_t iterations, ThriftSerializationProto proto = Thrift
 
     TCompactProtocolT<TMemoryBuffer> compact_protocol1(buffer1);
     TCompactProtocolT<TMemoryBuffer> compact_protocol2(buffer2);
-
     Record r1;
 
     for (size_t i = 0; i < kIntegers.size(); i++) {
@@ -289,13 +288,11 @@ thrift_serialize_test(size_t iterations, ThriftSerializationProto proto = Thrift
     }
 
     std::string serialized;
-
     if (proto == ThriftSerializationProto::Binary) {
         r1.write(&binary_protocol1);
     } else if (proto == ThriftSerializationProto::Compact) {
         r1.write(&compact_protocol1);
     }
-
     serialized = buffer1->getBufferAsString();
 
     // check if we can deserialize back
@@ -321,37 +318,42 @@ thrift_serialize_test(size_t iterations, ThriftSerializationProto proto = Thrift
         records[s].strings.assign(r1.strings.begin(), r1.strings.end());
     }
 
-    buffer1->resetBuffer();
-    buffer2->resetBuffer();
+    //warm up, in order to avoid the effect of memory allocation & memory copy
+    uint32_t initial_mem = 0xC0000000;
+    uint8_t *data_region = new uint8_t[initial_mem];
+    std::memset(data_region, '0', initial_mem);
+    std::shared_ptr<TMemoryBuffer> serialize_buffer(new TMemoryBuffer(data_region, initial_mem, TMemoryBuffer::TAKE_OWNERSHIP));
+    serialize_buffer->resetBuffer();
 
+    TBinaryProtocolT<TMemoryBuffer> serialize_binary_protocol(serialize_buffer);
+    TBinaryProtocolT<TMemoryBuffer> deserialize_binary_protocol(serialize_buffer);
 
+    TCompactProtocolT<TMemoryBuffer> serialize_compact_protocol(serialize_buffer);
+    TCompactProtocolT<TMemoryBuffer> deserialize_compact_protocol(serialize_buffer);
 
     //serialization
     auto begin_serialize = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < iterations; i++) {
         if (proto == ThriftSerializationProto::Binary) {
-            records[i].write(&binary_protocol1);
+            records[i].write(&serialize_binary_protocol);
         } else if (proto == ThriftSerializationProto::Compact) {
-            records[i].write(&compact_protocol1);
+            records[i].write(&serialize_compact_protocol);
         }
     }
     auto finish_serialize = std::chrono::high_resolution_clock::now();
 
-
-    serialized = buffer1->getBufferAsString();
     //deserialization
     auto begin_deserialize = std::chrono::high_resolution_clock::now();
-    buffer2->resetBuffer((uint8_t*)serialized.data(), serialized.length());
     for (size_t i = 0; i < iterations; i++) {
         if (proto == ThriftSerializationProto::Binary) {
-            records[i].read(&binary_protocol2);
+            records[i].read(&deserialize_binary_protocol);
         } else if (proto == ThriftSerializationProto::Compact) {
-            records[i].read(&compact_protocol2);
+            records[i].read(&deserialize_compact_protocol);
         }
     }
     auto finish_deserialize = std::chrono::high_resolution_clock::now();
 
-
+    //delete [] data_region;
     delete [] records;
     std::cout << "thrift_serialization : " << std::endl
              << " iterations = " << iterations << std::endl
@@ -359,10 +361,6 @@ thrift_serialize_test(size_t iterations, ThriftSerializationProto proto = Thrift
              << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
              << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
 }
-
-
-
-
 
 Result
 protobuf_serialization_test(size_t iterations)
@@ -442,21 +440,24 @@ void protobuf_serialize_test(size_t iterations)
     }
 
     std::string *strings = new std::string[iterations];
+
+    //warm up, in order to avoid the effect of memory allocation & memory copy
+    for(size_t i = 0; i < iterations; i++){    
+        records[i].SerializeToString(&strings[i]);
+        strings[i].clear();
+    }
+
  
     //serialization
-    std::ostringstream ostream;
     auto begin_serialize = std::chrono::high_resolution_clock::now();
     for(size_t i = 0; i < iterations; i++){
-        //records[i].SerializeToOstream(&ostream);
         records[i].SerializeToString(&strings[i]);
     }
     auto finish_serialize = std::chrono::high_resolution_clock::now();
 
     //deserialization
-    std::stringstream istream(ostream.str());
     auto begin_deserialize = std::chrono::high_resolution_clock::now();
     for(size_t i = 0; i < iterations; i++){
-        //records[i].ParseFromIstream(&istream);
         records[i].ParseFromString(strings[i]);
     }
     auto finish_deserialize = std::chrono::high_resolution_clock::now();
@@ -570,6 +571,8 @@ boost_serialization_test(size_t iterations)
     return Result("boost", BOOST_VERSION, serialized.size(), duration);
 }
 
+
+
 void boost_serialize_test(size_t iterations){
     using namespace boost_test;
 
@@ -600,8 +603,15 @@ void boost_serialize_test(size_t iterations){
         records[s].strings.assign(r1.strings.begin(), r1.strings.end());
     }
 
-    //serialization
+    //warm up, in order to avoid the effect of memory allocation & memory copy
     std::ostringstream ostream;
+    serialize_iteration(ostream, records, iterations);
+    ostream.clear();
+    ostream.seekp(0); // clear the contect of ostream
+    //ostream.str(std::string()); // clear the contect of ostream
+
+
+    //serialization
     auto begin_serialize = std::chrono::high_resolution_clock::now();
     serialize_iteration(ostream, records, iterations);
     auto finish_serialize = std::chrono::high_resolution_clock::now();
@@ -705,16 +715,21 @@ void msgpack_serialize_test(size_t iterations){
         records[s].strings.assign(r1.strings.begin(), r1.strings.end());
     }
 
-    sbuf.clear();
+    //warm up, in order to avoid the effect of memory allocation & memory copy
+    size_t initial_mem = 4L * 1024L * 1024L * 1024L; //4G
+    msgpack::sbuffer msgbuf(initial_mem);
+
+
     //serialization
     auto begin_serialize = std::chrono::high_resolution_clock::now();
     for(size_t s = 0; s < iterations; s++){
-        msgpack::pack(sbuf, records[s]);
+        msgpack::pack(msgbuf, records[s]);
     }
     auto finish_serialize = std::chrono::high_resolution_clock::now();
 
-    std::string serialize_result(sbuf.data(), sbuf.size());
-
+    std::string serialize_result(msgbuf.data(), msgbuf.size());
+    records[0].ids.clear();
+    std::cout << " records[0].size = " << records[0].ids.size() << std::endl;
     //deserialization
     auto begin_deserialize = std::chrono::high_resolution_clock::now();
     msg = msgpack::unpack(serialize_result.data(), serialize_result.size());
@@ -723,13 +738,14 @@ void msgpack_serialize_test(size_t iterations){
         obj.convert(records[s]);
     }
     auto finish_deserialize = std::chrono::high_resolution_clock::now();
+    std::cout << " records[0].size = " << records[0].ids.size() << std::endl;
     delete [] records ;
 
     std::cout << "msgpack_serialization : " << std::endl
              << " iterations = " << iterations << std::endl
              << " serialized form size = " << serialized_size << " bytes" << std::endl
              << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
-             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl ;
 }
 
 Result
@@ -798,8 +814,16 @@ void cereal_serialize_test(size_t iterations){
         records[s].ids.assign(r1.ids.begin(), r1.ids.end());
         records[s].strings.assign(r1.strings.begin(), r1.strings.end());
     }
-    //serialization
+
+    //warm up, in order to avoid the effect of memory allocation & memory copy
     std::ostringstream ostream;
+    serialize_iteration(ostream, records, iterations);
+    ostream.clear();
+    ostream.seekp(0); // clear the contect of ostream
+    //ostream.str(std::string()); // clear the contect of ostream
+
+
+    //serialization
     auto begin_serialize = std::chrono::high_resolution_clock::now();
     serialize_iteration(ostream, records, iterations);
     auto finish_serialize = std::chrono::high_resolution_clock::now();
@@ -857,9 +881,11 @@ void avro_serialize_test(size_t iterations){
         records[s].ids.assign(r1.ids.begin(), r1.ids.end());
         records[s].strings.assign(r1.strings.begin(), r1.strings.end());
     }
+    //warm up, in order to avoid the effect of memory allocation & memory copy
+    size_t initial_mem = 4L * 1024L * 1024L * 1024L;
+    out = avro::memoryOutputStream(initial_mem);
 
     //serialization
-    out = avro::memoryOutputStream();
     encoder = avro::binaryEncoder();
     encoder->init(*out);
     auto begin_serialize = std::chrono::high_resolution_clock::now();
@@ -1093,9 +1119,13 @@ void yas_serialize_test(size_t iterations){
         records[s].ids.assign(r1.ids.begin(), r1.ids.end());
         records[s].strings.assign(r1.strings.begin(), r1.strings.end());
     }
+    //warm up, in order to avoid the effect of memory allocation & memory copy
+    size_t initial_mem = 4L * 1024L * 1024L * 1024L;
+    char *serialized_result = new char[initial_mem];
+    std::memset(serialized_result, 0, initial_mem);
 
     //serialization
-    yas::mem_ostream os;
+    yas::mem_ostream os(serialized_result, initial_mem);
     auto begin_serialize = std::chrono::high_resolution_clock::now();
     yas::binary_oarchive<yas::mem_ostream, opts> oa(os);
     for(size_t i=0; i < iterations; i++){
@@ -1104,7 +1134,7 @@ void yas_serialize_test(size_t iterations){
     auto finish_serialize = std::chrono::high_resolution_clock::now();
 
     //deserialization
-    yas::mem_istream is(os.get_intrusive_buffer());
+    yas::mem_istream is(serialized_result, initial_mem);
     auto begin_deserialize = std::chrono::high_resolution_clock::now();
     yas::binary_iarchive<yas::mem_istream, opts> ia(is);
     for(size_t i=0; i < iterations; i++){
@@ -1112,7 +1142,7 @@ void yas_serialize_test(size_t iterations){
     }
     auto finish_deserialize = std::chrono::high_resolution_clock::now();
 
-
+    delete [] serialized_result; 
     delete [] records;
 
     std::cout << "yas_serialization : " << std::endl
@@ -1193,7 +1223,7 @@ main(int argc, char** argv)
         std::cerr << "Error: " << exc.what() << std::endl;
         return EXIT_FAILURE;
     }
-
+    
     print_results(args, results);
 
     google::protobuf::ShutdownProtobufLibrary();
