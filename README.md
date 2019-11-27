@@ -53,7 +53,8 @@ $ ./benchmark -i 100000 -s protobuf,cereal
 
 # Results
 
-Following results were obtained running 1000000 serialize-deserialize operations 50 times and then averaging results on a typical desktop computer with Intel Core i7 processor running Ubuntu 16.04. Exact versions of libraries used are:
+Following results were obtained running 100000 serialize-deserialize operations 3 times and then averaging results on a server, which equits with Intel Xeon E5-2650 processor and 2400MHz, 32G DDR4 memory. And the operating system is ubuntu 16.04 server
+Exact versions of libraries used are:
 
 * thrift 0.12.0
 * protobuf 3.7.0
@@ -65,34 +66,24 @@ Following results were obtained running 1000000 serialize-deserialize operations
 * flatbuffers 1.10.0
 * YAS 7.0.2
 
-| serializer     | object's size | avg. total time |
-| -------------- | ------------- | --------------- |
-| thrift-binary  | 17017         | 1190.22         |
-| thrift-compact | 13378         | 3474.32         |
-| protobuf       | 16116         | 2312.78         |
-| boost          | 17470         | 1195.04         |
-| msgpack        | 13402         | 2560.6          |
-| cereal         | 17416         | 1052.46         |
-| avro           | 16384         | 4488.18         |
-| yas            | 17416         | 302.7           |
-| yas-compact    | 13321         | 2063.34         |
+| serializer     | object's size (bytes) | avg. total time (ms)|
+| -------------- | --------------------- | ------------------- |
+| thrift-binary  | 17017                 | 2287                |
+| thrift-compact | 13378                 | 3675                |
+| protobuf       | 16116                 | 3642                |
+| boost          | 17470                 | 1550                |
+| msgpack        | 13402                 | 4203                |
+| cereal         | 17416                 | 1323                |
+| avro           | 16384                 | 5387                |
+| yas            | 17416                 | 407                 |
+| yas-compact    | 13321                 | 2319                |
 
 
-## Size
-
-![Size](images/size.png)
-
-## Time
-
-![Time](images/time.png)
 
 For capnproto and flatbuffers since they already store data in a "serialized" form and serialization basically means getting pointer to the internal storage, we measure full **build**/serialize/deserialize cycle. In the case of other libraries we measure serialize/deserialize cycle of the already built data structure.
 
-| serializer     | object's size | avg. total time |
-| -------------- | ------------- | --------------- |
-| capnproto      | 17768         | 400.98          |
-| flatbuffers    | 17632         | 491.5           |
+| serializer     | object's size (bytes) | avg. total time (ms) |
+| -------------- | --------------------- | -------------------- |
+| capnproto      | 17768                 | 565                  |
+| flatbuffers    | 17632                 | 606                  |
 
-![Time](images/time2.png)
-
-Size measured in bytes, time measured in milliseconds.
