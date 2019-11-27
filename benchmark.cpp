@@ -258,6 +258,112 @@ thrift_serialization_test(size_t iterations, ThriftSerializationProto proto = Th
     return Result(tag, PACKAGE_VERSION, serialized.size(), duration);
 }
 
+void
+thrift_serialize_test(size_t iterations, ThriftSerializationProto proto = ThriftSerializationProto::Binary){
+
+    using apache::thrift::protocol::TBinaryProtocol;
+    using apache::thrift::protocol::TBinaryProtocolT;
+    using apache::thrift::protocol::TCompactProtocol;
+    using apache::thrift::protocol::TCompactProtocolT;
+    using apache::thrift::transport::TMemoryBuffer;
+
+    using namespace thrift_test;
+
+    std::shared_ptr<TMemoryBuffer> buffer1(new TMemoryBuffer());
+    std::shared_ptr<TMemoryBuffer> buffer2(new TMemoryBuffer());
+
+    TBinaryProtocolT<TMemoryBuffer> binary_protocol1(buffer1);
+    TBinaryProtocolT<TMemoryBuffer> binary_protocol2(buffer2);
+
+    TCompactProtocolT<TMemoryBuffer> compact_protocol1(buffer1);
+    TCompactProtocolT<TMemoryBuffer> compact_protocol2(buffer2);
+
+    Record r1;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.ids.push_back(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.strings.push_back(kStringValue);
+    }
+
+    std::string serialized;
+
+    if (proto == ThriftSerializationProto::Binary) {
+        r1.write(&binary_protocol1);
+    } else if (proto == ThriftSerializationProto::Compact) {
+        r1.write(&compact_protocol1);
+    }
+
+    serialized = buffer1->getBufferAsString();
+
+    // check if we can deserialize back
+    Record r2;
+
+    buffer2->resetBuffer((uint8_t*)serialized.data(), serialized.length());
+
+    if (proto == ThriftSerializationProto::Binary) {
+        r2.read(&binary_protocol2);
+    } else if (proto == ThriftSerializationProto::Compact) {
+        r2.read(&compact_protocol2);
+    }
+
+    if (r1 != r2) {
+        throw std::logic_error("thrift's case: deserialization failed");
+    }
+
+    auto serialized_size = serialized.size();
+
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        records[s].ids.assign(r1.ids.begin(), r1.ids.end());
+        records[s].strings.assign(r1.strings.begin(), r1.strings.end());
+    }
+
+    buffer1->resetBuffer();
+    buffer2->resetBuffer();
+
+
+
+    //serialization
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    for (size_t i = 0; i < iterations; i++) {
+        if (proto == ThriftSerializationProto::Binary) {
+            records[i].write(&binary_protocol1);
+        } else if (proto == ThriftSerializationProto::Compact) {
+            records[i].write(&compact_protocol1);
+        }
+    }
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+
+    serialized = buffer1->getBufferAsString();
+    //deserialization
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    buffer2->resetBuffer((uint8_t*)serialized.data(), serialized.length());
+    for (size_t i = 0; i < iterations; i++) {
+        if (proto == ThriftSerializationProto::Binary) {
+            records[i].read(&binary_protocol2);
+        } else if (proto == ThriftSerializationProto::Compact) {
+            records[i].read(&compact_protocol2);
+        }
+    }
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+
+
+    delete [] records;
+    std::cout << "thrift_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
+}
+
+
+
+
+
 Result
 protobuf_serialization_test(size_t iterations)
 {
@@ -295,6 +401,78 @@ protobuf_serialization_test(size_t iterations)
 
     return Result("protobuf", GOOGLE_PROTOBUF_VERSION, serialized.size(), duration);
 }
+
+
+void protobuf_serialize_test(size_t iterations)
+{
+    using namespace protobuf_test;
+
+    Record r1;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.add_ids(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.add_strings(kStringValue);
+    }
+
+    std::string serialized;
+
+    r1.SerializeToString(&serialized);
+
+    // check if we can deserialize back
+    Record r2;
+    bool ok = r2.ParseFromString(serialized);
+    if (!ok /*|| r2 != r1*/) {
+        throw std::logic_error("protobuf's case: deserialization failed");
+    }
+
+    auto serialized_size = serialized.size();
+
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        for (size_t i = 0; i < kIntegers.size(); i++) {
+            records[s].add_ids(kIntegers[i]);
+        }
+
+        for (size_t i = 0; i < kStringsCount; i++) {
+            records[s].add_strings(kStringValue);
+        }
+    }
+
+    std::string *strings = new std::string[iterations];
+ 
+    //serialization
+    std::ostringstream ostream;
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    for(size_t i = 0; i < iterations; i++){
+        //records[i].SerializeToOstream(&ostream);
+        records[i].SerializeToString(&strings[i]);
+    }
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+    //deserialization
+    std::stringstream istream(ostream.str());
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    for(size_t i = 0; i < iterations; i++){
+        //records[i].ParseFromIstream(&istream);
+        records[i].ParseFromString(strings[i]);
+    }
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+    delete [] strings ;
+    delete [] records ;
+
+    std::cout << "protobuf_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
+
+}
+
+
+
 
 Result
 capnproto_serialization_test(size_t iterations)
@@ -392,6 +570,59 @@ boost_serialization_test(size_t iterations)
     return Result("boost", BOOST_VERSION, serialized.size(), duration);
 }
 
+void boost_serialize_test(size_t iterations){
+    using namespace boost_test;
+
+    Record r1, r2;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.ids.push_back(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.strings.push_back(kStringValue);
+    }
+
+    std::string serialized;
+
+    to_string(r1, serialized);
+    from_string(r2, serialized);
+
+    if (r1 != r2) {
+        throw std::logic_error("boost's case: deserialization failed");
+    }
+
+    size_t serialized_size = serialized.size();
+
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        records[s].ids.assign(r1.ids.begin(), r1.ids.end());
+        records[s].strings.assign(r1.strings.begin(), r1.strings.end());
+    }
+
+    //serialization
+    std::ostringstream ostream;
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    serialize_iteration(ostream, records, iterations);
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+    //deserialization
+    std::stringstream istream(ostream.str());
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    deserialize_iteration(istream, records, iterations);
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+    
+    delete [] records ;
+
+    std::cout << "boost_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
+}
+
+
+
 Result
 msgpack_serialization_test(size_t iterations)
 {
@@ -437,6 +668,70 @@ msgpack_serialization_test(size_t iterations)
     return Result("msgpack", msgpack_version(), serialized.size(), duration);
 }
 
+
+void msgpack_serialize_test(size_t iterations){
+    using namespace msgpack_test;
+
+    Record r1, r2;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.ids.push_back(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.strings.push_back(kStringValue);
+    }
+
+    msgpack::sbuffer sbuf;
+
+    msgpack::pack(sbuf, r1);
+
+    std::string serialized(sbuf.data(), sbuf.size());
+
+    msgpack::object_handle msg = msgpack::unpack(serialized.data(), serialized.size());
+
+    msgpack::object obj = msg.get();
+
+    obj.convert(r2);
+
+    if (r1 != r2) {
+        throw std::logic_error("msgpack's case: deserialization failed");
+    }
+    auto serialized_size = serialized.size();
+
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        records[s].ids.assign(r1.ids.begin(), r1.ids.end());
+        records[s].strings.assign(r1.strings.begin(), r1.strings.end());
+    }
+
+    sbuf.clear();
+    //serialization
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    for(size_t s = 0; s < iterations; s++){
+        msgpack::pack(sbuf, records[s]);
+    }
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+    std::string serialize_result(sbuf.data(), sbuf.size());
+
+    //deserialization
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    msg = msgpack::unpack(serialize_result.data(), serialize_result.size());
+    for(size_t s = 0; s < iterations; s++){
+        obj = msg.get();
+        obj.convert(records[s]);
+    }
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+    delete [] records ;
+
+    std::cout << "msgpack_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
+}
+
 Result
 cereal_serialization_test(size_t iterations)
 {
@@ -473,9 +768,130 @@ cereal_serialization_test(size_t iterations)
     return Result("cereal", "", serialized.size(), duration);
 }
 
+void cereal_serialize_test(size_t iterations){
+    using namespace cereal_test;
+
+    Record r1, r2;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.ids.push_back(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.strings.push_back(kStringValue);
+    }
+
+    std::string serialized;
+
+    to_string(r1, serialized);
+    from_string(r2, serialized);
+
+    if (r1 != r2) {
+        throw std::logic_error("boost's case: deserialization failed");
+    }
+
+    size_t serialized_size = serialized.size();
+
+
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        records[s].ids.assign(r1.ids.begin(), r1.ids.end());
+        records[s].strings.assign(r1.strings.begin(), r1.strings.end());
+    }
+    //serialization
+    std::ostringstream ostream;
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    serialize_iteration(ostream, records, iterations);
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+    //deserialization
+    std::stringstream istream(ostream.str());
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    deserialize_iteration(istream, records, iterations);
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+    delete [] records ;
+
+    std::cout << "cereal_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << std::endl;
+}
+
+
+
+void avro_serialize_test(size_t iterations){
+    using namespace avro_test;
+
+    Record r1, r2;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.ids.push_back(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.strings.push_back(kStringValue);
+    }
+
+    std::unique_ptr<avro::OutputStream> out = avro::memoryOutputStream();
+    avro::EncoderPtr encoder = avro::binaryEncoder();
+
+    encoder->init(*out);
+    avro::encode(*encoder, r1);
+
+    auto serialized_size = out->byteCount();
+
+    std::unique_ptr<avro::InputStream> in = avro::memoryInputStream(*out);
+    avro::DecoderPtr decoder = avro::binaryDecoder();
+
+    decoder->init(*in);
+    avro::decode(*decoder, r2);
+
+    if (r1.ids != r2.ids || r1.strings != r2.strings || r2.ids.size() != kIntegers.size()
+        || r2.strings.size() != kStringsCount) {
+        throw std::logic_error("avro's case: deserialization failed");
+    }
+
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        records[s].ids.assign(r1.ids.begin(), r1.ids.end());
+        records[s].strings.assign(r1.strings.begin(), r1.strings.end());
+    }
+
+    //serialization
+    out = avro::memoryOutputStream();
+    encoder = avro::binaryEncoder();
+    encoder->init(*out);
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    for (size_t s = 0; s < iterations; s++) {
+        avro::encode(*encoder, records[s]);
+    }
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+
+    //deserialization
+    in = avro::memoryInputStream(*out);
+    decoder = avro::binaryDecoder();
+    decoder->init(*in);
+
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    for (size_t s = 0; s < iterations; s++) {
+       avro::decode(*decoder, records[s]);
+    }
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+    delete [] records ;
+
+    std::cout << "avro_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl ;
+
+}
+
+
 Result
-avro_serialization_test(size_t iterations)
-{
+avro_serialization_test(size_t iterations){
     using namespace avro_test;
 
     Record r1, r2;
@@ -524,6 +940,9 @@ avro_serialization_test(size_t iterations)
 
     return Result("avro", "", serialized_size, duration);
 }
+
+
+
 
 Result
 flatbuffers_serialization_test(size_t iterations)
@@ -637,6 +1056,74 @@ yas_serialization_test(size_t iterations)
     return Result(tag, YAS_VERSION_STRING, serialized.size(), duration);
 }
 
+template <std::size_t opts>
+void yas_serialize_test(size_t iterations){
+    using namespace yas_test;
+
+    Record r1, r2;
+
+    for (size_t i = 0; i < kIntegers.size(); i++) {
+        r1.ids.push_back(kIntegers[i]);
+    }
+
+    for (size_t i = 0; i < kStringsCount; i++) {
+        r1.strings.push_back(kStringValue);
+    }
+
+    std::string serialized;
+
+    to_string<opts>(r1, serialized);
+    from_string<opts>(r2, serialized);
+
+    if (r1 != r2) {
+        throw std::logic_error("yas' case: deserialization failed");
+    }
+
+    std::string tag;
+
+    if (opts & yas::compacted) {
+        tag = "yas-compact";
+    } else {
+        tag = "yas";
+    }
+
+    auto serialized_size = serialized.size();
+    Record *records = new Record[iterations];
+    for(size_t s = 0; s < iterations; s++){
+        records[s].ids.assign(r1.ids.begin(), r1.ids.end());
+        records[s].strings.assign(r1.strings.begin(), r1.strings.end());
+    }
+
+    //serialization
+    yas::mem_ostream os;
+    auto begin_serialize = std::chrono::high_resolution_clock::now();
+    yas::binary_oarchive<yas::mem_ostream, opts> oa(os);
+    for(size_t i=0; i < iterations; i++){
+        oa& records[i];
+    }
+    auto finish_serialize = std::chrono::high_resolution_clock::now();
+
+    //deserialization
+    yas::mem_istream is(os.get_intrusive_buffer());
+    auto begin_deserialize = std::chrono::high_resolution_clock::now();
+    yas::binary_iarchive<yas::mem_istream, opts> ia(is);
+    for(size_t i=0; i < iterations; i++){
+        ia& records[i];
+    }
+    auto finish_deserialize = std::chrono::high_resolution_clock::now();
+
+
+    delete [] records;
+
+    std::cout << "yas_serialization : " << std::endl
+             << " iterations = " << iterations << std::endl
+             << " serialized form size = " << serialized_size  << " bytes" << std::endl
+             << " serialization time = " <<  std::chrono::duration_cast<std::chrono::milliseconds>(finish_serialize - begin_serialize).count() << " ms" << std::endl
+             << " deserialization time = " << std::chrono::duration_cast<std::chrono::milliseconds>(finish_deserialize - begin_deserialize).count() << " ms" << std::endl << std::endl;
+}
+
+
+
 int
 main(int argc, char** argv)
 {
@@ -652,14 +1139,17 @@ main(int argc, char** argv)
     try {
         if (args.serializers.empty() || args.serializers.find("thrift-binary") != args.serializers.end()) {
             results.push_back(thrift_serialization_test(args.iterations, ThriftSerializationProto::Binary));
+            thrift_serialize_test(args.iterations, ThriftSerializationProto::Binary);
         }
 
         if (args.serializers.empty() || args.serializers.find("thrift-compact") != args.serializers.end()) {
             results.push_back(thrift_serialization_test(args.iterations, ThriftSerializationProto::Compact));
+            thrift_serialize_test(args.iterations, ThriftSerializationProto::Compact);
         }
 
         if (args.serializers.empty() || args.serializers.find("protobuf") != args.serializers.end()) {
             results.push_back(protobuf_serialization_test(args.iterations));
+            protobuf_serialize_test(args.iterations);
         }
 
         if (args.serializers.empty() || args.serializers.find("capnproto") != args.serializers.end()) {
@@ -668,18 +1158,22 @@ main(int argc, char** argv)
 
         if (args.serializers.empty() || args.serializers.find("boost") != args.serializers.end()) {
             results.push_back(boost_serialization_test(args.iterations));
+            boost_serialize_test(args.iterations);
         }
 
         if (args.serializers.empty() || args.serializers.find("msgpack") != args.serializers.end()) {
             results.push_back(msgpack_serialization_test(args.iterations));
+            msgpack_serialize_test(args.iterations);
         }
 
         if (args.serializers.empty() || args.serializers.find("cereal") != args.serializers.end()) {
             results.push_back(cereal_serialization_test(args.iterations));
+            cereal_serialize_test(args.iterations);
         }
 
         if (args.serializers.empty() || args.serializers.find("avro") != args.serializers.end()) {
             results.push_back(avro_serialization_test(args.iterations));
+            avro_serialize_test(args.iterations);
         }
 
         if (args.serializers.empty() || args.serializers.find("flatbuffers") != args.serializers.end()) {
@@ -688,10 +1182,12 @@ main(int argc, char** argv)
 
         if (args.serializers.empty() || args.serializers.find("yas") != args.serializers.end()) {
             results.push_back(yas_serialization_test<yas::binary | yas::no_header>(args.iterations));
+            yas_serialize_test<yas::binary | yas::no_header>(args.iterations);
         }
 
         if (args.serializers.empty() || args.serializers.find("yas-compact") != args.serializers.end()) {
             results.push_back(yas_serialization_test<yas::binary | yas::no_header | yas::compacted>(args.iterations));
+            yas_serialize_test<yas::binary | yas::no_header | yas::compacted>(args.iterations);
         }
     } catch (std::exception& exc) {
         std::cerr << "Error: " << exc.what() << std::endl;

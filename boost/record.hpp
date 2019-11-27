@@ -54,6 +54,9 @@ private:
 void to_string(const Record &record, std::string &data);
 void from_string(Record &record, const std::string &data);
 
+void serialize_iteration(std::ostringstream &stream, const Record *record, size_t iterations);
+void deserialize_iteration(std::stringstream &stream, Record *record, size_t iterations);
+
 } // namespace
 
 #endif
